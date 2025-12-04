@@ -1,0 +1,1473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>STOCHASTIC // NFL</title>
+    <!-- Inline SVG favicon - terminal style -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230a0a0a'/%3E%3Crect x='2' y='2' width='28' height='28' fill='none' stroke='%232a2a2a' stroke-width='1'/%3E%3Ctext x='16' y='22' font-family='monospace' font-size='14' font-weight='bold' fill='%2300d26a' text-anchor='middle'%3E$%3C/text%3E%3C/svg%3E">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #111111;
+            --bg-tertiary: #1a1a1a;
+            --border: #2a2a2a;
+            --border-light: #333333;
+            --text-primary: #e8e8e8;
+            --text-secondary: #888888;
+            --text-muted: #555555;
+            --accent-positive: #00d26a;
+            --accent-negative: #ff4757;
+            --accent-warning: #ffa502;
+            --accent-info: #3498db;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 13px;
+            line-height: 1.5;
+            min-height: 100vh;
+        }
+
+        /* Subtle scanline overlay */
+        body::after {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                rgba(0, 0, 0, 0.03) 2px,
+                rgba(0, 0, 0, 0.03) 4px
+            );
+            z-index: 9999;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 16px;
+        }
+
+        /* Terminal Panel */
+        .panel {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg-tertiary);
+        }
+
+        .panel-title {
+            font-size: 11px;
+            font-weight: 500;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+        }
+
+        .panel-title::before {
+            content: '> ';
+            color: var(--accent-info);
+        }
+
+        .panel-timestamp {
+            font-size: 10px;
+            color: var(--text-muted);
+        }
+
+        .panel-body {
+            padding: 12px;
+        }
+
+        /* Header */
+        .header {
+            background: var(--bg-primary);
+            border-bottom: 1px solid var(--border);
+            padding: 12px 0;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+        }
+
+        .logo-stochastic {
+            color: var(--text-primary);
+        }
+
+        .logo-divider {
+            color: var(--text-muted);
+            margin: 0 8px;
+        }
+
+        .logo-nfl {
+            color: var(--accent-info);
+        }
+
+        .status-bar {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--accent-warning);
+        }
+
+        .status-dot.live {
+            background: var(--accent-positive);
+            animation: blink 1s infinite;
+        }
+
+        .status-dot.offline {
+            background: var(--accent-negative);
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0.3; }
+        }
+
+        .clock {
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* Demo Banner */
+        .demo-banner {
+            background: var(--accent-warning);
+            color: #000;
+            text-align: center;
+            padding: 6px;
+            font-size: 11px;
+            font-weight: 500;
+            letter-spacing: 0.05em;
+            display: none;
+        }
+
+        .demo-banner.visible {
+            display: block;
+        }
+
+        /* Quote Bar (Performance Metrics) */
+        .quote-bar {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            margin: 16px 0;
+        }
+
+        .quote-bar-inner {
+            display: flex;
+            flex-wrap: wrap;
+        }
+
+        .quote-item {
+            flex: 1;
+            min-width: 140px;
+            padding: 12px 16px;
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .quote-item:last-child {
+            border-right: none;
+        }
+
+        .quote-label {
+            font-size: 10px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .quote-value {
+            font-size: 20px;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .quote-value.positive {
+            color: var(--accent-positive);
+        }
+
+        .quote-value.negative {
+            color: var(--accent-negative);
+        }
+
+        .quote-value.neutral {
+            color: var(--text-primary);
+        }
+
+        .quote-sub {
+            font-size: 10px;
+            color: var(--text-muted);
+        }
+
+        /* Main Grid */
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 16px;
+            margin: 16px 0;
+        }
+
+        @media (min-width: 1024px) {
+            .main-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        /* Charts */
+        .chart-container {
+            height: 180px;
+            position: relative;
+        }
+
+        /* Data Table */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+
+        .data-table th {
+            text-align: left;
+            padding: 8px 12px;
+            font-size: 10px;
+            font-weight: 500;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg-tertiary);
+        }
+
+        .data-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .data-table tr:hover td {
+            background: var(--bg-tertiary);
+        }
+
+        .data-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        /* Tier Indicators */
+        .tier {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .tier-bar {
+            display: flex;
+            gap: 2px;
+        }
+
+        .tier-segment {
+            width: 4px;
+            height: 12px;
+            background: var(--border);
+        }
+
+        .tier.high .tier-segment {
+            background: var(--accent-positive);
+        }
+
+        .tier.medium .tier-segment:nth-child(-n+3) {
+            background: var(--accent-warning);
+        }
+
+        .tier.low .tier-segment:nth-child(1) {
+            background: var(--accent-negative);
+        }
+
+        .tier-text {
+            color: var(--text-secondary);
+        }
+
+        .tier.high .tier-text {
+            color: var(--accent-positive);
+        }
+
+        .tier.medium .tier-text {
+            color: var(--accent-warning);
+        }
+
+        .tier.low .tier-text {
+            color: var(--accent-negative);
+        }
+
+        /* Expandable Row */
+        .expandable-content {
+            display: none;
+            padding: 12px;
+            background: var(--bg-tertiary);
+            border-top: 1px solid var(--border);
+            font-size: 12px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        .expandable-content.visible {
+            display: block;
+        }
+
+        .expand-trigger {
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .expand-trigger:hover {
+            color: var(--accent-info);
+        }
+
+        .expand-icon {
+            display: inline-block;
+            width: 12px;
+            color: var(--text-muted);
+            margin-right: 4px;
+        }
+
+        /* Rankings */
+        .ranking-row {
+            display: flex;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .ranking-row:last-child {
+            border-bottom: none;
+        }
+
+        .ranking-pos {
+            width: 32px;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .ranking-team {
+            width: 48px;
+            font-weight: 600;
+        }
+
+        .ranking-name {
+            flex: 1;
+            font-size: 11px;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-right: 12px;
+        }
+
+        .ranking-bar-container {
+            width: 120px;
+            margin-right: 12px;
+        }
+
+        .ranking-bar {
+            height: 6px;
+            background: var(--border);
+        }
+
+        .ranking-bar-fill {
+            height: 100%;
+            background: var(--accent-info);
+            transition: width 0.3s ease;
+        }
+
+        .ranking-value {
+            width: 48px;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+            color: var(--accent-info);
+        }
+
+        /* Bottom Grid */
+        .bottom-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 16px;
+            margin: 16px 0;
+        }
+
+        @media (min-width: 1024px) {
+            .bottom-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        /* Schedule */
+        .schedule-row {
+            display: flex;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 12px;
+        }
+
+        .schedule-row:last-child {
+            border-bottom: none;
+        }
+
+        .schedule-row:nth-child(even) {
+            background: var(--bg-tertiary);
+            margin: 0 -12px;
+            padding: 8px 12px;
+        }
+
+        .schedule-week {
+            width: 48px;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .schedule-matchup {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .schedule-team {
+            font-weight: 600;
+            width: 36px;
+        }
+
+        .schedule-at {
+            color: var(--text-muted);
+        }
+
+        .schedule-time {
+            width: 100px;
+            text-align: right;
+            color: var(--text-secondary);
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* Footer */
+        .footer {
+            background: var(--bg-tertiary);
+            border-top: 1px solid var(--border);
+            padding: 8px 0;
+            margin-top: 24px;
+        }
+
+        .footer-content {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            font-size: 10px;
+            color: var(--text-muted);
+        }
+
+        .footer-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .footer-divider {
+            color: var(--border);
+        }
+
+        .footer-status {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* Filter Controls */
+        .filter-bar {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .filter-select {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 6px 10px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            cursor: pointer;
+        }
+
+        .filter-select:focus {
+            outline: none;
+            border-color: var(--accent-info);
+        }
+
+        .filter-select option {
+            background: var(--bg-secondary);
+        }
+
+        /* Loading skeleton */
+        .skeleton {
+            background: linear-gradient(90deg, var(--bg-tertiary) 25%, var(--border) 50%, var(--bg-tertiary) 75%);
+            background-size: 200% 100%;
+            animation: skeleton-loading 1.5s infinite;
+        }
+
+        @keyframes skeleton-loading {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        .skeleton-line {
+            height: 16px;
+            margin: 8px 0;
+        }
+
+        /* Empty State */
+        .empty-state {
+            padding: 32px;
+            text-align: center;
+            color: var(--text-muted);
+        }
+
+        /* Pagination */
+        .pagination {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px;
+            border-top: 1px solid var(--border);
+            background: var(--bg-tertiary);
+        }
+
+        .pagination-info {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .pagination-controls {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .pagination-btn {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            padding: 6px 12px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .pagination-btn:hover:not(:disabled) {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border-color: var(--accent-info);
+        }
+
+        .pagination-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .pagination-btn.active {
+            background: var(--accent-info);
+            border-color: var(--accent-info);
+            color: #000;
+        }
+
+        .pagination-pages {
+            display: flex;
+            gap: 4px;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 640px) {
+            .quote-item {
+                min-width: 50%;
+                border-bottom: 1px solid var(--border);
+            }
+
+            .quote-item:nth-child(2) {
+                border-right: none;
+            }
+
+            .quote-item:nth-child(3),
+            .quote-item:nth-child(4) {
+                border-bottom: none;
+            }
+
+            .ranking-bar-container {
+                display: none;
+            }
+
+            .schedule-time {
+                width: auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Demo Mode Banner -->
+    <div id="demoBanner" class="demo-banner">
+        DEMO MODE - DISPLAYING SAMPLE DATA
+    </div>
+
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">
+                    <span class="logo-stochastic">STOCHASTIC</span>
+                    <span class="logo-divider">//</span>
+                    <span class="logo-nfl">NFL</span>
+                </div>
+                <div class="status-bar">
+                    <div class="status-item">
+                        <span id="statusDot" class="status-dot"></span>
+                        <span id="statusText">CONNECTING</span>
+                    </div>
+                    <div class="status-item clock">
+                        <span id="clock">--:--:--</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container">
+        <!-- Quote Bar (Performance Metrics) -->
+        <div class="quote-bar">
+            <div class="quote-bar-inner">
+                <div class="quote-item">
+                    <span class="quote-label">Win Rate</span>
+                    <span id="winRate" class="quote-value neutral">--</span>
+                    <span id="winRateRecord" class="quote-sub">-- W / -- L</span>
+                </div>
+                <div class="quote-item">
+                    <span class="quote-label">ROI</span>
+                    <span id="roi" class="quote-value neutral">--</span>
+                    <span class="quote-sub">Return on Investment</span>
+                </div>
+                <div class="quote-item">
+                    <span class="quote-label">P/L</span>
+                    <span id="totalProfit" class="quote-value neutral">--</span>
+                    <span class="quote-sub">Units Profit</span>
+                </div>
+                <div class="quote-item">
+                    <span class="quote-label">Sharpe</span>
+                    <span id="sharpeRatio" class="quote-value neutral">--</span>
+                    <span class="quote-sub">Risk-Adjusted Return</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Grid -->
+        <div class="main-grid">
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title">ROI_TREND</span>
+                    <span class="panel-timestamp">2024 SEASON</span>
+                </div>
+                <div class="panel-body">
+                    <div class="chart-container">
+                        <canvas id="roiChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title">BET_DISTRIBUTION</span>
+                    <span class="panel-timestamp">BY TYPE</span>
+                </div>
+                <div class="panel-body">
+                    <div class="chart-container">
+                        <canvas id="betTypeChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Picks and Rankings Grid -->
+        <div class="main-grid">
+            <!-- Active Picks -->
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title">ACTIVE_PICKS</span>
+                    <span class="panel-timestamp" id="picksCount">0 PICKS</span>
+                </div>
+                <div class="panel-body" style="padding: 0;">
+                    <div class="filter-bar" style="padding: 12px 12px 0 12px;">
+                        <select id="tierFilter" class="filter-select">
+                            <option value="all">ALL TIERS</option>
+                            <option value="high">HIGH</option>
+                            <option value="medium">MEDIUM</option>
+                            <option value="low">LOW</option>
+                        </select>
+                        <select id="typeFilter" class="filter-select">
+                            <option value="all">ALL TYPES</option>
+                            <option value="spread">SPREAD</option>
+                            <option value="total">TOTAL</option>
+                            <option value="moneyline">ML</option>
+                        </select>
+                    </div>
+                    <div id="picksContainer">
+                        <div style="padding: 12px;">
+                            <div class="skeleton skeleton-line"></div>
+                            <div class="skeleton skeleton-line" style="width: 70%;"></div>
+                            <div class="skeleton skeleton-line" style="width: 85%;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Power Rankings -->
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title">POWER_RANKINGS</span>
+                    <span class="panel-timestamp">ELO RATINGS</span>
+                </div>
+                <div class="panel-body" id="teamsContainer">
+                    <div class="skeleton skeleton-line"></div>
+                    <div class="skeleton skeleton-line" style="width: 80%;"></div>
+                    <div class="skeleton skeleton-line" style="width: 90%;"></div>
+                    <div class="skeleton skeleton-line" style="width: 75%;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Schedule -->
+        <div class="panel" style="margin: 16px 0;">
+            <div class="panel-header">
+                <span class="panel-title">SCHEDULE</span>
+                <span class="panel-timestamp">UPCOMING GAMES</span>
+            </div>
+            <div class="panel-body" id="scheduleContainer">
+                <div class="skeleton skeleton-line"></div>
+                <div class="skeleton skeleton-line" style="width: 85%;"></div>
+                <div class="skeleton skeleton-line" style="width: 90%;"></div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-left">
+                    <span>v0.4.0</span>
+                    <span class="footer-divider">|</span>
+                    <span>UPD <span id="lastUpdated">--:--</span></span>
+                    <span class="footer-divider">|</span>
+                    <span>Monte Carlo + XGBoost + Elo</span>
+                </div>
+                <div class="footer-status">
+                    <a href="https://github.com/Jack-GitHub12" target="_blank" rel="noopener" style="color: var(--text-muted); text-decoration: none;">@Jack-GitHub12</a>
+                    <span class="footer-divider">|</span>
+                    <span id="footerStatusDot" class="status-dot"></span>
+                    <span id="footerStatusText">CONNECTING</span>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // ============================================
+        // CONFIGURATION & NFL DATA
+        // ============================================
+
+        const API_BASE_URL = window.location.hostname === 'localhost'
+            ? 'http://localhost:8000'
+            : 'https://stochastic-football-api.onrender.com';
+
+        const NFL_TEAMS = {
+            KC: 'Kansas City Chiefs',
+            SF: 'San Francisco 49ers',
+            BUF: 'Buffalo Bills',
+            PHI: 'Philadelphia Eagles',
+            BAL: 'Baltimore Ravens',
+            DET: 'Detroit Lions',
+            DAL: 'Dallas Cowboys',
+            MIA: 'Miami Dolphins',
+            GB: 'Green Bay Packers',
+            CIN: 'Cincinnati Bengals',
+            LAR: 'Los Angeles Rams',
+            SEA: 'Seattle Seahawks',
+            NYJ: 'New York Jets',
+            NYG: 'New York Giants',
+            NE: 'New England Patriots',
+            PIT: 'Pittsburgh Steelers',
+            CLE: 'Cleveland Browns',
+            LV: 'Las Vegas Raiders',
+            LAC: 'Los Angeles Chargers',
+            DEN: 'Denver Broncos',
+            HOU: 'Houston Texans',
+            IND: 'Indianapolis Colts',
+            TEN: 'Tennessee Titans',
+            JAX: 'Jacksonville Jaguars',
+            MIN: 'Minnesota Vikings',
+            CHI: 'Chicago Bears',
+            TB: 'Tampa Bay Buccaneers',
+            NO: 'New Orleans Saints',
+            ATL: 'Atlanta Falcons',
+            CAR: 'Carolina Panthers',
+            ARI: 'Arizona Cardinals',
+            WAS: 'Washington Commanders',
+        };
+
+        // ============================================
+        // DEMO DATA (Fallback when API unavailable)
+        // ============================================
+
+        const DEMO_DATA = {
+            performance: {
+                total_picks: 37,
+                wins: 0,
+                losses: 0,
+                pushes: 0,
+                pending: 37,
+                win_rate: 0.0,
+                roi: 0.0,
+                total_profit: 0.0,
+                avg_odds: -110,
+                avg_ev: 15.2,
+                sharpe_ratio: null,
+                max_drawdown: null
+            },
+            picks: [
+                {
+                    pick_id: 'pick_demo_1',
+                    game_id: '2024_14_CAR_PHI',
+                    bet_type: 'spread',
+                    selection: 'PHI +13.0',
+                    odds: -110,
+                    expected_value: 56.7,
+                    confidence_tier: 'high',
+                    kelly_fraction: 0.156,
+                    reasoning: 'Elo projects PHI -10.6. 23.6pt edge vs market. Ratings: PHI 1630, CAR 1420.'
+                },
+                {
+                    pick_id: 'pick_demo_2',
+                    game_id: '2024_14_LAC_KC',
+                    bet_type: 'spread',
+                    selection: 'KC +4.0',
+                    odds: -110,
+                    expected_value: 43.0,
+                    confidence_tier: 'high',
+                    kelly_fraction: 0.118,
+                    reasoning: 'Elo model projects KC -7.6. Edge of 11.6 points vs market. Home Elo: 1650, Away Elo: 1515.'
+                },
+                {
+                    pick_id: 'pick_demo_3',
+                    game_id: '2024_14_DET_GB',
+                    bet_type: 'spread',
+                    selection: 'DET -3.5',
+                    odds: -110,
+                    expected_value: 18.5,
+                    confidence_tier: 'high',
+                    kelly_fraction: 0.065,
+                    reasoning: 'Elo projects DET -5.9. 2.4pt edge vs market. Ratings: DET 1645, GB 1585.'
+                },
+                {
+                    pick_id: 'pick_demo_4',
+                    game_id: '2024_14_BUF_LAR',
+                    bet_type: 'total',
+                    selection: 'Under 49.5',
+                    odds: -110,
+                    expected_value: 8.2,
+                    confidence_tier: 'medium',
+                    kelly_fraction: 0.035,
+                    reasoning: 'Projected total: 46.0. 3.5pt edge. BUF OFF: 26.0, LAR OFF: 24.5.'
+                }
+            ],
+            teams: [
+                { team: 'KC', name: 'Kansas City Chiefs', elo_rating: 1672, conference: 'AFC', division: 'West' },
+                { team: 'DET', name: 'Detroit Lions', elo_rating: 1658, conference: 'NFC', division: 'North' },
+                { team: 'PHI', name: 'Philadelphia Eagles', elo_rating: 1641, conference: 'NFC', division: 'East' },
+                { team: 'BAL', name: 'Baltimore Ravens', elo_rating: 1635, conference: 'AFC', division: 'North' },
+                { team: 'SF', name: 'San Francisco 49ers', elo_rating: 1628, conference: 'NFC', division: 'West' },
+                { team: 'BUF', name: 'Buffalo Bills', elo_rating: 1619, conference: 'AFC', division: 'East' },
+                { team: 'GB', name: 'Green Bay Packers', elo_rating: 1598, conference: 'NFC', division: 'North' },
+                { team: 'MIA', name: 'Miami Dolphins', elo_rating: 1587, conference: 'AFC', division: 'East' },
+            ],
+            schedule: [
+                { game_id: '2024_14_KC_BUF', season: 2024, week: 14, home_team: 'KC', away_team: 'BUF', game_time: '2024-12-08T20:20:00Z', stadium: 'Arrowhead Stadium' },
+                { game_id: '2024_14_SF_PHI', season: 2024, week: 14, home_team: 'SF', away_team: 'PHI', game_time: '2024-12-08T16:25:00Z', stadium: 'Levi\'s Stadium' },
+                { game_id: '2024_14_DET_GB', season: 2024, week: 14, home_team: 'DET', away_team: 'GB', game_time: '2024-12-08T13:00:00Z', stadium: 'Ford Field' },
+                { game_id: '2024_14_BAL_MIA', season: 2024, week: 14, home_team: 'BAL', away_team: 'MIA', game_time: '2024-12-08T13:00:00Z', stadium: 'M&T Bank Stadium' },
+            ]
+        };
+
+        // ============================================
+        // STATE
+        // ============================================
+
+        let isUsingDemoData = false;
+        let currentPicks = [];
+        let charts = {};
+        let currentPage = 1;
+        const PICKS_PER_PAGE = 10;
+
+        // ============================================
+        // CLOCK
+        // ============================================
+
+        function updateClock() {
+            const now = new Date();
+            const time = now.toLocaleTimeString('en-US', {
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            document.getElementById('clock').textContent = time;
+        }
+
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // ============================================
+        // API & CONNECTION
+        // ============================================
+
+        async function apiCallWithRetry(endpoint, retries = 3) {
+            for (let attempt = 1; attempt <= retries; attempt++) {
+                try {
+                    setConnectionStatus('connecting', attempt > 1 ? `RETRY ${attempt}/${retries}` : 'CONNECTING');
+
+                    const controller = new AbortController();
+                    const timeout = setTimeout(() => controller.abort(), 15000);
+
+                    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+                        signal: controller.signal
+                    });
+                    clearTimeout(timeout);
+
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    return await response.json();
+                } catch (error) {
+                    console.warn(`API attempt ${attempt} failed:`, error.message);
+                    if (attempt < retries) {
+                        await new Promise(r => setTimeout(r, 1000 * attempt));
+                    }
+                }
+            }
+            return null;
+        }
+
+        function setConnectionStatus(status, customText = null) {
+            const dot = document.getElementById('statusDot');
+            const text = document.getElementById('statusText');
+            const footerDot = document.getElementById('footerStatusDot');
+            const footerText = document.getElementById('footerStatusText');
+            const banner = document.getElementById('demoBanner');
+
+            const states = {
+                connecting: { dotClass: '', text: customText || 'CONNECTING' },
+                connected: { dotClass: 'live', text: 'LIVE' },
+                demo: { dotClass: '', text: 'DEMO' },
+                error: { dotClass: 'offline', text: 'OFFLINE' }
+            };
+
+            const state = states[status] || states.error;
+
+            dot.className = `status-dot ${state.dotClass}`;
+            text.textContent = state.text;
+            footerDot.className = `status-dot ${state.dotClass}`;
+            footerText.textContent = state.text;
+
+            if (status === 'demo') {
+                banner.classList.add('visible');
+            } else {
+                banner.classList.remove('visible');
+            }
+        }
+
+        function updateLastUpdated() {
+            const now = new Date();
+            document.getElementById('lastUpdated').textContent = now.toLocaleTimeString('en-US', {
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        // ============================================
+        // DATA LOADING
+        // ============================================
+
+        async function loadDashboardData() {
+            const results = await Promise.all([
+                apiCallWithRetry('/api/v1/performance'),
+                apiCallWithRetry('/api/v1/picks'),
+                apiCallWithRetry('/api/v1/teams'),
+                apiCallWithRetry('/api/v1/schedule')
+            ]);
+
+            const [performance, picks, teams, schedule] = results;
+            const anyFailed = results.some(r => r === null);
+
+            if (anyFailed) {
+                isUsingDemoData = true;
+                setConnectionStatus('demo');
+                renderPerformance(DEMO_DATA.performance);
+                renderPicks(DEMO_DATA.picks);
+                renderTeams(DEMO_DATA.teams);
+                renderSchedule(DEMO_DATA.schedule);
+            } else {
+                isUsingDemoData = false;
+                setConnectionStatus('connected');
+                renderPerformance(performance);
+                renderPicks(picks.picks || []);
+                renderTeams(teams.teams || []);
+                renderSchedule(schedule.games || []);
+            }
+
+            updateLastUpdated();
+            initCharts();
+        }
+
+        // ============================================
+        // RENDERING FUNCTIONS
+        // ============================================
+
+        function renderPerformance(data) {
+            const winRateEl = document.getElementById('winRate');
+            const roiEl = document.getElementById('roi');
+            const profitEl = document.getElementById('totalProfit');
+            const sharpeEl = document.getElementById('sharpeRatio');
+
+            winRateEl.textContent = `${(data.win_rate * 100).toFixed(1)}%`;
+            winRateEl.className = `quote-value ${data.win_rate >= 0.52 ? 'positive' : data.win_rate < 0.48 ? 'negative' : 'neutral'}`;
+
+            document.getElementById('winRateRecord').textContent = `${data.wins}W / ${data.losses}L`;
+
+            roiEl.textContent = `${data.roi >= 0 ? '+' : ''}${(data.roi * 100).toFixed(1)}%`;
+            roiEl.className = `quote-value ${data.roi >= 0 ? 'positive' : 'negative'}`;
+
+            profitEl.textContent = `${data.total_profit >= 0 ? '+' : ''}${data.total_profit.toFixed(2)}u`;
+            profitEl.className = `quote-value ${data.total_profit >= 0 ? 'positive' : 'negative'}`;
+
+            sharpeEl.textContent = data.sharpe_ratio?.toFixed(2) || '--';
+            sharpeEl.className = `quote-value ${data.sharpe_ratio >= 1 ? 'positive' : data.sharpe_ratio < 0 ? 'negative' : 'neutral'}`;
+        }
+
+        function renderPicks(picks) {
+            currentPicks = picks;
+            currentPage = 1; // Reset to first page when new data loads
+            filterAndRenderPicks();
+        }
+
+        function filterAndRenderPicks() {
+            const tierFilter = document.getElementById('tierFilter').value;
+            const typeFilter = document.getElementById('typeFilter').value;
+
+            let filtered = currentPicks;
+            if (tierFilter !== 'all') {
+                filtered = filtered.filter(p => p.confidence_tier === tierFilter);
+            }
+            if (typeFilter !== 'all') {
+                filtered = filtered.filter(p => p.bet_type === typeFilter);
+            }
+
+            const totalPicks = filtered.length;
+            const totalPages = Math.ceil(totalPicks / PICKS_PER_PAGE);
+
+            // Ensure current page is valid
+            if (currentPage > totalPages) currentPage = totalPages;
+            if (currentPage < 1) currentPage = 1;
+
+            const startIdx = (currentPage - 1) * PICKS_PER_PAGE;
+            const endIdx = startIdx + PICKS_PER_PAGE;
+            const paginated = filtered.slice(startIdx, endIdx);
+
+            document.getElementById('picksCount').textContent = `${totalPicks} PICKS`;
+
+            const container = document.getElementById('picksContainer');
+
+            if (filtered.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        NO PICKS MATCH FILTERS
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = `
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>PICK</th>
+                            <th>TYPE</th>
+                            <th>ODDS</th>
+                            <th>EV</th>
+                            <th>KELLY</th>
+                            <th>TIER</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${paginated.map((pick, i) => {
+                            const ev = typeof pick.expected_value === 'number' ? pick.expected_value : 0;
+                            const evDisplay = ev > 10 ? ev.toFixed(0) : ev.toFixed(1);
+                            const kelly = typeof pick.kelly_fraction === 'number' ? pick.kelly_fraction : 0;
+                            const kellyDisplay = kelly > 1 ? kelly.toFixed(1) : (kelly * 100).toFixed(1);
+                            return `
+                            <tr class="expand-trigger" onclick="toggleAnalysis('${pick.pick_id}')">
+                                <td>
+                                    <span class="expand-icon">+</span>
+                                    ${pick.selection || 'N/A'}
+                                </td>
+                                <td style="color: var(--text-secondary);">${(pick.bet_type || 'spread').toUpperCase()}</td>
+                                <td style="font-variant-numeric: tabular-nums;">${pick.odds > 0 ? '+' : ''}${pick.odds || -110}</td>
+                                <td style="color: var(--accent-positive);">+${evDisplay}%</td>
+                                <td style="color: var(--accent-info);">${kellyDisplay}%</td>
+                                <td>
+                                    <span class="tier ${pick.confidence_tier || 'medium'}">
+                                        <span class="tier-bar">
+                                            <span class="tier-segment"></span>
+                                            <span class="tier-segment"></span>
+                                            <span class="tier-segment"></span>
+                                            <span class="tier-segment"></span>
+                                        </span>
+                                        <span class="tier-text">${(pick.confidence_tier || 'medium').toUpperCase()}</span>
+                                    </span>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td colspan="6" style="padding: 0; border: none;">
+                                    <div id="analysis-${pick.pick_id}" class="expandable-content">
+                                        <strong style="color: var(--text-primary);">ANALYSIS:</strong> ${pick.reasoning || 'Model-generated pick.'}
+                                    </div>
+                                </td>
+                            </tr>
+                        `;}).join('')}
+                    </tbody>
+                </table>
+                ${totalPages > 1 ? `
+                <div class="pagination">
+                    <span class="pagination-info">
+                        ${startIdx + 1}-${Math.min(endIdx, totalPicks)} of ${totalPicks}
+                    </span>
+                    <div class="pagination-controls">
+                        <button class="pagination-btn" onclick="goToPage(1)" ${currentPage === 1 ? 'disabled' : ''}>«</button>
+                        <button class="pagination-btn" onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>‹</button>
+                        <div class="pagination-pages">
+                            ${generatePageButtons(currentPage, totalPages)}
+                        </div>
+                        <button class="pagination-btn" onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>›</button>
+                        <button class="pagination-btn" onclick="goToPage(${totalPages})" ${currentPage === totalPages ? 'disabled' : ''}>»</button>
+                    </div>
+                </div>
+                ` : ''}
+            `;
+        }
+
+        function generatePageButtons(current, total) {
+            let pages = [];
+            let start = Math.max(1, current - 2);
+            let end = Math.min(total, current + 2);
+
+            // Adjust to always show 5 pages if possible
+            if (end - start < 4) {
+                if (start === 1) {
+                    end = Math.min(total, start + 4);
+                } else {
+                    start = Math.max(1, end - 4);
+                }
+            }
+
+            for (let i = start; i <= end; i++) {
+                pages.push(`<button class="pagination-btn ${i === current ? 'active' : ''}" onclick="goToPage(${i})">${i}</button>`);
+            }
+            return pages.join('');
+        }
+
+        function goToPage(page) {
+            currentPage = page;
+            filterAndRenderPicks();
+            // Scroll to top of picks container
+            document.getElementById('picksContainer').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        function toggleAnalysis(pickId) {
+            const el = document.getElementById(`analysis-${pickId}`);
+            const trigger = el.closest('tbody').querySelector(`tr[onclick*="${pickId}"] .expand-icon`);
+
+            if (el.classList.contains('visible')) {
+                el.classList.remove('visible');
+                trigger.textContent = '+';
+            } else {
+                // Close all others
+                document.querySelectorAll('.expandable-content.visible').forEach(other => {
+                    other.classList.remove('visible');
+                });
+                document.querySelectorAll('.expand-icon').forEach(icon => {
+                    icon.textContent = '+';
+                });
+
+                el.classList.add('visible');
+                trigger.textContent = '-';
+            }
+        }
+
+        function renderTeams(teams) {
+            const container = document.getElementById('teamsContainer');
+            const maxElo = Math.max(...teams.map(t => t.elo_rating));
+            const minElo = Math.min(...teams.map(t => t.elo_rating));
+            const range = maxElo - minElo || 1;
+
+            container.innerHTML = teams.slice(0, 8).map((team, i) => {
+                const percentage = ((team.elo_rating - minElo) / range) * 60 + 40;
+                return `
+                    <div class="ranking-row">
+                        <span class="ranking-pos">#${i + 1}</span>
+                        <span class="ranking-team">${team.team}</span>
+                        <span class="ranking-name">${team.name}</span>
+                        <div class="ranking-bar-container">
+                            <div class="ranking-bar">
+                                <div class="ranking-bar-fill" style="width: ${percentage}%;"></div>
+                            </div>
+                        </div>
+                        <span class="ranking-value">${team.elo_rating}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderSchedule(games) {
+            const container = document.getElementById('scheduleContainer');
+
+            if (games.length === 0) {
+                container.innerHTML = '<div class="empty-state">NO UPCOMING GAMES</div>';
+                return;
+            }
+
+            container.innerHTML = games.map((game, i) => {
+                const gameTime = new Date(game.game_time);
+                const dayStr = gameTime.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
+                const timeStr = gameTime.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+
+                return `
+                    <div class="schedule-row">
+                        <span class="schedule-week">W${game.week}</span>
+                        <div class="schedule-matchup">
+                            <span class="schedule-team">${game.away_team}</span>
+                            <span class="schedule-at">@</span>
+                            <span class="schedule-team">${game.home_team}</span>
+                        </div>
+                        <span class="schedule-time">${dayStr} ${timeStr}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // ============================================
+        // CHARTS
+        // ============================================
+
+        function initCharts() {
+            const chartColors = {
+                line: '#3498db',
+                lineFill: 'rgba(52, 152, 219, 0.1)',
+                grid: '#1a1a1a',
+                text: '#888888'
+            };
+
+            // ROI Chart
+            const roiCtx = document.getElementById('roiChart').getContext('2d');
+            if (charts.roi) charts.roi.destroy();
+
+            charts.roi = new Chart(roiCtx, {
+                type: 'line',
+                data: {
+                    labels: ['W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7', 'W8', 'W9', 'W10', 'W11', 'W12', 'W13'],
+                    datasets: [{
+                        label: 'ROI %',
+                        data: [1.2, 2.8, 1.5, 3.2, 4.8, 3.9, 5.1, 6.2, 5.8, 6.9, 7.4, 7.8, 7.8],
+                        borderColor: chartColors.line,
+                        backgroundColor: chartColors.lineFill,
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 0,
+                        pointHoverRadius: 4,
+                        pointHoverBackgroundColor: chartColors.line,
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: '#111111',
+                            titleColor: '#e8e8e8',
+                            bodyColor: '#888888',
+                            borderColor: '#2a2a2a',
+                            borderWidth: 1,
+                            padding: 10,
+                            displayColors: false,
+                            callbacks: {
+                                label: ctx => `ROI: ${ctx.parsed.y.toFixed(1)}%`
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            grid: { color: chartColors.grid, drawBorder: false },
+                            ticks: {
+                                color: chartColors.text,
+                                font: { family: 'JetBrains Mono', size: 10 },
+                                callback: v => v + '%'
+                            },
+                            border: { display: false }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: {
+                                color: chartColors.text,
+                                font: { family: 'JetBrains Mono', size: 10 }
+                            },
+                            border: { display: false }
+                        }
+                    }
+                }
+            });
+
+            // Bet Type Chart - Horizontal Bar instead of doughnut
+            const betTypeCtx = document.getElementById('betTypeChart').getContext('2d');
+            if (charts.betType) charts.betType.destroy();
+
+            charts.betType = new Chart(betTypeCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['SPREAD', 'TOTAL', 'ML'],
+                    datasets: [{
+                        data: [62, 28, 10],
+                        backgroundColor: ['#3498db', '#00d26a', '#ffa502'],
+                        borderWidth: 0,
+                        barThickness: 20
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: '#111111',
+                            titleColor: '#e8e8e8',
+                            bodyColor: '#888888',
+                            borderColor: '#2a2a2a',
+                            borderWidth: 1,
+                            padding: 10,
+                            displayColors: false,
+                            callbacks: {
+                                label: ctx => `${ctx.parsed.x}%`
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: chartColors.grid, drawBorder: false },
+                            ticks: {
+                                color: chartColors.text,
+                                font: { family: 'JetBrains Mono', size: 10 },
+                                callback: v => v + '%'
+                            },
+                            border: { display: false },
+                            max: 100
+                        },
+                        y: {
+                            grid: { display: false },
+                            ticks: {
+                                color: chartColors.text,
+                                font: { family: 'JetBrains Mono', size: 10 }
+                            },
+                            border: { display: false }
+                        }
+                    }
+                }
+            });
+        }
+
+        // ============================================
+        // EVENT LISTENERS
+        // ============================================
+
+        document.getElementById('tierFilter').addEventListener('change', () => { currentPage = 1; filterAndRenderPicks(); });
+        document.getElementById('typeFilter').addEventListener('change', () => { currentPage = 1; filterAndRenderPicks(); });
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', loadDashboardData);
+
+        // Refresh every 5 minutes
+        setInterval(loadDashboardData, 5 * 60 * 1000);
+    </script>
+</body>
+</html>

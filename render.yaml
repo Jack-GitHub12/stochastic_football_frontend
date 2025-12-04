@@ -1,0 +1,19 @@
+# Render Blueprint - NFL Stochastic Football Frontend
+# Static site dashboard
+
+services:
+  - type: web
+    name: stochastic-football-frontend
+    runtime: static
+    region: oregon
+    plan: starter
+    buildCommand: echo "No build needed"
+    staticPublishPath: ./
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: no-cache
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
